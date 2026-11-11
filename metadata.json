@@ -1,0 +1,6 @@
+{
+  "name": "KerjasamaBPT",
+  "description": "Aplikasi manajemen kerja sama (MoU dan PKS) untuk BPT Komdigi dengan pengarsipan terstruktur, ekstraksi AI, penyusunan draft PKS, dan integrasi Google Drive.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
