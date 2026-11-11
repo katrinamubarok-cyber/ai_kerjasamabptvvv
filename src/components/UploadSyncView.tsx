@@ -153,10 +153,10 @@ export const UploadSyncView: React.FC<UploadSyncViewProps> = ({
                 className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                   isDriveConnected
                     ? 'bg-emerald-100 text-emerald-800'
-                    : 'bg-amber-100 text-amber-800'
+                    : 'bg-blue-100 text-blue-800'
                 }`}
               >
-                {isDriveConnected ? 'Terhubung' : isDemoMode ? 'Mode Demo' : 'Belum Terhubung'}
+                {isDriveConnected ? 'Terhubung' : 'Siap Dihubungkan'}
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">

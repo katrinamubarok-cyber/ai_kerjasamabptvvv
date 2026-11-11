@@ -1,4 +1,13 @@
-import { DokumenKerjasama, AntreanItem } from '../types';
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import {
+  getAuth,
+  signInWithPopup,
+  GoogleAuthProvider,
+  onAuthStateChanged,
+  User,
+  signOut,
+} from 'firebase/auth';
+import firebaseConfig from '../../firebase-applet-config.json';
 
 declare global {
   interface Window {
@@ -7,12 +16,45 @@ declare global {
   }
 }
 
+// Initialize Firebase App
+const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+const auth = getAuth(app);
+
+const SCOPES = [
+  'https://www.googleapis.com/auth/drive.readonly',
+  'https://www.googleapis.com/auth/drive.file',
+  'https://www.googleapis.com/auth/documents',
+];
+
+const provider = new GoogleAuthProvider();
+SCOPES.forEach((scope) => provider.addScope(scope));
+provider.setCustomParameters({ prompt: 'consent' });
+
 class GoogleDriveService {
   private accessToken: string | null = null;
+  private currentUser: User | null = null;
   private tokenExpiresAt: number = 0;
   private tokenClient: any = null;
 
-  // Session-only token storage
+  constructor() {
+    this.setupAuthStateListener();
+  }
+
+  private setupAuthStateListener() {
+    onAuthStateChanged(auth, (user) => {
+      this.currentUser = user;
+      if (!user) {
+        this.accessToken = null;
+        this.tokenExpiresAt = 0;
+      }
+    });
+  }
+
+  getCurrentUser(): User | null {
+    return this.currentUser || auth.currentUser;
+  }
+
+  // Session-only in-memory token storage
   getAccessToken(): string | null {
     if (this.accessToken && Date.now() < this.tokenExpiresAt) {
       return this.accessToken;
@@ -24,30 +66,27 @@ class GoogleDriveService {
     return !!this.getAccessToken();
   }
 
-  initTokenClient(clientId: string, onTokenReceived?: (token: string) => void): boolean {
+  // GSI fallback / companion init
+  initTokenClient(clientId?: string, onTokenReceived?: (token: string) => void): boolean {
+    const finalClientId = clientId || firebaseConfig.oAuthClientId;
     if (typeof window === 'undefined' || !window.google?.accounts?.oauth2) {
-      console.warn('Google Identity Services (GSI) belum termuat.');
       return false;
     }
 
-    if (!clientId) {
-      return false;
-    }
+    if (!finalClientId) return false;
 
     try {
       this.tokenClient = window.google.accounts.oauth2.initTokenClient({
-        client_id: clientId,
-        scope:
-          'https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/documents',
+        client_id: finalClientId,
+        scope: SCOPES.join(' '),
         callback: (response: any) => {
           if (response.error) {
             console.error('Google OAuth Error:', response);
             return;
           }
           this.accessToken = response.access_token;
-          // default token expiration ~3600 seconds
           const expiresIn = response.expires_in ? parseInt(response.expires_in) * 1000 : 3600 * 1000;
-          this.tokenExpiresAt = Date.now() + expiresIn - 60000; // 1 min buffer
+          this.tokenExpiresAt = Date.now() + expiresIn - 60000;
           if (onTokenReceived) {
             onTokenReceived(response.access_token);
           }
@@ -55,21 +94,42 @@ class GoogleDriveService {
       });
       return true;
     } catch (err) {
-      console.error('Gagal inisialisasi GSI Token Client:', err);
+      console.warn('GSI Token Client warning:', err);
       return false;
     }
   }
 
+  // Request Access Token: uses Firebase Auth signInWithPopup first, falls back to GSI token client
   async requestAccessToken(): Promise<string> {
+    const active = this.getAccessToken();
+    if (active) {
+      return active;
+    }
+
+    // Attempt Firebase Auth signInWithPopup
+    try {
+      const result = await signInWithPopup(auth, provider);
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      if (credential?.accessToken) {
+        this.accessToken = credential.accessToken;
+        this.currentUser = result.user;
+        this.tokenExpiresAt = Date.now() + 3500 * 1000; // ~1 hour
+        return this.accessToken;
+      }
+    } catch (firebaseErr: any) {
+      console.warn('Firebase popup attempt failed or closed, trying GSI client:', firebaseErr);
+    }
+
+    // Fallback: GSI Token client
     return new Promise((resolve, reject) => {
-      const active = this.getAccessToken();
-      if (active) {
-        return resolve(active);
+      const clientId = firebaseConfig.oAuthClientId;
+      if (!this.tokenClient && clientId) {
+        this.initTokenClient(clientId);
       }
 
       if (!this.tokenClient) {
         return reject(
-          new Error('Google OAuth Client ID belum dikonfigurasi. Silakan atur di menu Pengaturan.')
+          new Error('Klien OAuth Google belum siap. Pastikan izin Google diaktifkan.')
         );
       }
 
@@ -77,8 +137,10 @@ class GoogleDriveService {
       this.tokenClient.callback = (resp: any) => {
         if (originalCallback) originalCallback(resp);
         if (resp.error) {
-          reject(new Error(resp.error_description || resp.error || 'Autentikasi Google dibatalkan'));
+          reject(new Error(resp.error_description || resp.error || 'Autentikasi Google dibatalkan.'));
         } else {
+          this.accessToken = resp.access_token;
+          this.tokenExpiresAt = Date.now() + 3500 * 1000;
           resolve(resp.access_token);
         }
       };
@@ -87,17 +149,25 @@ class GoogleDriveService {
     });
   }
 
-  disconnect() {
+  async disconnect() {
+    try {
+      await signOut(auth);
+    } catch (e) {
+      console.warn('Error signing out of Firebase:', e);
+    }
+
     if (this.accessToken && window.google?.accounts?.oauth2) {
       try {
         window.google.accounts.oauth2.revoke(this.accessToken, () => {
-          console.log('Akses Google Drive dicabut dari sesi.');
+          console.log('Token sesi Google dicabut.');
         });
       } catch (e) {
         console.warn(e);
       }
     }
+
     this.accessToken = null;
+    this.currentUser = null;
     this.tokenExpiresAt = 0;
   }
 
@@ -133,7 +203,6 @@ class GoogleDriveService {
     const token = await this.requestAccessToken();
 
     if (mimeType === 'application/vnd.google-apps.document') {
-      // Export Google Doc as plain text
       const exportUrl = `https://www.googleapis.com/drive/v3/files/${fileId}/export?mimeType=text/plain`;
       const res = await fetch(exportUrl, {
         headers: { Authorization: `Bearer ${token}` },
@@ -143,7 +212,6 @@ class GoogleDriveService {
       return { text, mimeType: 'text/plain' };
     }
 
-    // Binary file (PDF or DOCX)
     const downloadUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`;
     const res = await fetch(downloadUrl, {
       headers: { Authorization: `Bearer ${token}` },
@@ -155,7 +223,6 @@ class GoogleDriveService {
       const reader = new FileReader();
       reader.onloadend = () => {
         const result = reader.result as string;
-        // Strip data:mime/type;base64,
         const raw = result.split(',')[1] || result;
         resolve(raw);
       };
@@ -174,7 +241,6 @@ class GoogleDriveService {
   ): Promise<{ docId: string; webViewLink: string }> {
     const token = await this.requestAccessToken();
 
-    // 1. Create document metadata via Drive API
     const metadata: any = {
       name: title,
       mimeType: 'application/vnd.google-apps.document',
@@ -200,7 +266,6 @@ class GoogleDriveService {
     const docFile = await createRes.json();
     const docId = docFile.id;
 
-    // 2. Insert text content using Google Docs API
     if (plainTextContent) {
       const docsApiUrl = `https://docs.googleapis.com/v1/documents/${docId}:batchUpdate`;
       const updateRes = await fetch(docsApiUrl, {
@@ -222,11 +287,10 @@ class GoogleDriveService {
       });
 
       if (!updateRes.ok) {
-        console.warn('Gagal memasukkan teks via Docs API, berkas kosong tetap dibuat:', await updateRes.text());
+        console.warn('Gagal memasukkan teks via Docs API:', await updateRes.text());
       }
     }
 
-    // 3. Get webViewLink
     const getFileRes = await fetch(`https://www.googleapis.com/drive/v3/files/${docId}?fields=id,webViewLink`, {
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -246,7 +310,6 @@ class GoogleDriveService {
   ): Promise<{ fileId: string; webViewLink: string }> {
     const token = await this.requestAccessToken();
 
-    // Export doc as PDF blob
     const exportUrl = `https://www.googleapis.com/drive/v3/files/${docId}/export?mimeType=application/pdf`;
     const res = await fetch(exportUrl, {
       headers: { Authorization: `Bearer ${token}` },
@@ -255,7 +318,6 @@ class GoogleDriveService {
 
     const pdfBlob = await res.blob();
 
-    // Upload PDF to target folder
     const metadata: any = {
       name: pdfTitle.endsWith('.pdf') ? pdfTitle : `${pdfTitle}.pdf`,
       mimeType: 'application/pdf',

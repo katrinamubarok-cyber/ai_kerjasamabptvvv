@@ -90,28 +90,23 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Right Controls: Drive Status & Role Switcher */}
           <div className="flex items-center space-x-3">
             {/* Drive Connection Status Pill */}
-            {isDemoMode ? (
+            {isDriveConnected ? (
               <button
                 onClick={onOpenDriveModal}
-                className="flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-medium bg-amber-500/10 border border-amber-500/30 text-amber-300 hover:bg-amber-500/20 transition-all cursor-pointer"
-                title="Google OAuth Client ID belum diatur. Berjalan dalam Mode Demo."
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/30 transition-all cursor-pointer"
+                title="Google Drive aktif terhubung. Klik untuk mengelola."
               >
-                <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
-                <span className="hidden md:inline font-semibold">MODE DEMO</span>
-                <span className="text-amber-400/80 hidden lg:inline">• Unggah Manual</span>
-              </button>
-            ) : isDriveConnected ? (
-              <div className="flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/15 border border-emerald-500/30 text-emerald-300">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="hidden sm:inline">Drive Terhubung</span>
-              </div>
+                <span>Google Drive Terhubung</span>
+              </button>
             ) : (
               <button
                 onClick={onOpenDriveModal}
-                className="flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-medium bg-blue-500/20 border border-blue-500/40 text-blue-300 hover:bg-blue-500/30 transition-all cursor-pointer"
+                className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white shadow-xs transition-all cursor-pointer"
+                title="Hubungkan akun Google Drive untuk sinkronisasi otomatis"
               >
                 <HardDrive className="w-3.5 h-3.5" />
-                <span>Sambung Drive</span>
+                <span>Hubungkan Google Drive</span>
               </button>
             )}
 

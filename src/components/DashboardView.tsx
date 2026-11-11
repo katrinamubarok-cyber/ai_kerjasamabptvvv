@@ -222,7 +222,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
           <div className="my-2">
             <div className="text-xs font-bold text-slate-800 truncate">
-              {isDemoMode ? 'Mode Demo (Lokal)' : isDriveConnected ? 'Tersambung Aktif' : 'Terputus'}
+              {isDriveConnected ? 'Tersambung Aktif' : 'Siap Dihubungkan'}
             </div>
             <div className="text-[11px] text-slate-500 truncate">
               {lastSyncTime ? `Terakhir: ${lastSyncTime}` : 'Belum pernah disinkron'}

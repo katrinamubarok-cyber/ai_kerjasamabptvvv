@@ -12,7 +12,7 @@ const STORES = {
 
 // Default Settings
 export const DEFAULT_SETTINGS: PengaturanApp = {
-  googleClientId: '',
+  googleClientId: '216460492029-k6h2lf3f3pappvhj0iktkr5aqpb7c781.apps.googleusercontent.com',
   folderSumberId: '',
   folderSumberNama: 'Arsip MoU-PKS (BPT Komdigi)',
   folderDraftId: '',
@@ -542,7 +542,11 @@ class StorageService {
         const req = store.get('app_settings');
         req.onsuccess = () => {
           if (req.result && req.result.data) {
-            resolve({ ...DEFAULT_SETTINGS, ...req.result.data });
+            const merged = { ...DEFAULT_SETTINGS, ...req.result.data };
+            if (!merged.googleClientId) {
+              merged.googleClientId = DEFAULT_SETTINGS.googleClientId;
+            }
+            resolve(merged);
           } else {
             resolve(DEFAULT_SETTINGS);
           }

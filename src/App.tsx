@@ -49,7 +49,7 @@ export default function App() {
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
   const [isSummarizing, setIsSummarizing] = useState<boolean>(false);
 
-  const isDemoMode = !settings.googleClientId || settings.googleClientId.trim() === '';
+  const isDemoMode = false;
 
   // Load Initial Data from Storage
   const loadData = useCallback(async () => {
@@ -63,12 +63,11 @@ export default function App() {
     setSettings(stt);
     setQueue(que);
 
-    // If client ID is present, initialize token client
-    if (stt.googleClientId) {
-      googleDriveService.initTokenClient(stt.googleClientId, () => {
-        setIsDriveConnected(true);
-      });
-    }
+    // Initialize Google Drive connection
+    googleDriveService.initTokenClient(stt.googleClientId, () => {
+      setIsDriveConnected(true);
+    });
+    setIsDriveConnected(googleDriveService.isConnected());
   }, []);
 
   useEffect(() => {
@@ -246,26 +245,20 @@ export default function App() {
     );
   };
 
-  // Sync with Drive (Real or Simulated Demo)
+  // Sync with Google Drive
   const handleSyncWithDrive = async () => {
     setIsSyncing(true);
     try {
-      if (isDemoMode) {
-        // Demo Simulation Sync: simulate checking folder 'Arsip MoU-PKS'
-        await new Promise((r) => setTimeout(r, 1500));
-        const nowStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-        setLastSyncTime(nowStr);
+      if (!googleDriveService.isConnected()) {
+        await googleDriveService.requestAccessToken();
+        setIsDriveConnected(true);
+      }
 
-        await recordLog(
-          'Simulasi Sinkronisasi Folder Drive (Mode Demo)',
-          `Folder "${settings.folderSumberNama}" diperiksa. Seluruh berkas contoh telah mutakhir.`
-        );
-      } else {
-        // Real Google Drive Sync via Drive API v3
-        const driveFiles = await googleDriveService.listFilesInFolder(settings.folderSumberId);
-        const existingDocs = await storageService.getAllDocuments();
-        let newCount = 0;
-        let updatedCount = 0;
+      // Real Google Drive Sync via Drive API v3
+      const driveFiles = await googleDriveService.listFilesInFolder(settings.folderSumberId);
+      const existingDocs = await storageService.getAllDocuments();
+      let newCount = 0;
+      let updatedCount = 0;
 
         for (const file of driveFiles) {
           const existing = existingDocs.find((d) => d.driveFileId === file.id);
@@ -331,7 +324,6 @@ export default function App() {
           'Sinkronisasi Google Drive',
           `Sinkronisasi selesai: ${newCount} berkas baru diantrekan, ${updatedCount} berkas diperbarui versinya.`
         );
-      }
     } catch (err: any) {
       console.error('Sync failed:', err);
       alert('Gagal menyinkronkan Google Drive: ' + err.message);

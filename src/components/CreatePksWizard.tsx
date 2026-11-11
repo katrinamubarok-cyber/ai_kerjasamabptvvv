@@ -173,7 +173,7 @@ export const CreatePksWizard: React.FC<CreatePksWizardProps> = ({
 
   // Step 4: Create in Google Docs
   const handleCreateInGoogleDocs = async () => {
-    if (isDemoMode || !isDriveConnected) {
+    if (!isDriveConnected) {
       onOpenDriveModal();
       return;
     }
